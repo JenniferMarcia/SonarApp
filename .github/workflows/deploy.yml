@@ -45,4 +45,4 @@ jobs:
         env:
           HF_TOKEN: ${{ secrets.TOKEN_HF }}
         run: |
-          git push https://MeguminChan:$HF_TOKEN@huggingface.co/spaces/MeguminChan/Sonar_project main
+          git push --force https://MeguminChan:$HF_TOKEN@huggingface.co/spaces/MeguminChan/Sonar_project main
