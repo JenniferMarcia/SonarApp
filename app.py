@@ -196,9 +196,40 @@ if st.session_state.fake_data is not None:
                         st.error("Erreur lors de la récupération des importances.")
                 except Exception as e:
                     st.error(f"Erreur de connexion : {e}")
+        
+        # XAI
+        st.divider()
+        st.subheader("🧠 Pourquoi cette prédiction ?")
+        
+        if st.button("Afficher l'explication SHAP", type="secondary", width='stretch'):
+            with st.spinner("Calcul en cours..."):
+                try:
+                    resp = requests.post(f"{API_URL}/explain", 
+                                        json={"features": st.session_state.fake_data},
+                                        timeout=15)
+                    
+                    if resp.status_code == 200:
+                        img = resp.json()["shap_plot"]
+                        st.image(f"data:image/png;base64,{img}", width='stretch')
+                        
+                        st.markdown("""
+                        **Intérprétation**
+                            - Les forces **ROUGES** poussent le modèle à prédire une **Mine** .
+                            - Les forces **BLEUES** poussent le modèle à prédire une **Roche** .
+                            - La taille des flèches indique l'importance de chaque fréquence (C11, C12, etc.).
+                            - Le point de rencontre final donne la probabilité calculée par l'IA.
+                            """)
+                    else:
+                        st.error(f"Erreur API: {resp.status_code}")
+                except Exception as e:
+                    st.error(f"Erreur: {str(e)}")
+                except requests.exceptions.Timeout:
+                    st.error("Timeout lors du calcul SHAP (opération intensive)")
+                except Exception as e:
+                    st.error(f"Erreur SHAP : {e}")
 
 else:
     st.info("Utilisez la barre latérale pour générer un signal.")
 
 st.divider()
-st.markdown('<div style="text-align: center; color: gray;"><small> Sonar Project AI | Jennifer Marcia </small></div>', unsafe_allow_html=True)
+st.markdown('<div style="text-align: center; color: gray;"><small> Sonar Project AI | Jennifer </small></div>', unsafe_allow_html=True)
