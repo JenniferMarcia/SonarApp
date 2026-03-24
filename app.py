@@ -6,6 +6,31 @@ import plotly.graph_objects as go
 
 st.set_page_config(page_title="Sonar Detector", page_icon="⚓", layout="wide")
 
+
+st.markdown("""
+<style>
+    /* Bouton principal personnalisé */
+    div.stButton > button[kind="primary"] {
+        background: linear-gradient(45deg, #00c6ff, #0072ff);
+        color: white;
+        border: none;
+        padding: 10px 20px;
+        border-radius: 10px;
+        font-weight: bold;
+        box-shadow: 0 4px 15px rgba(0, 198, 255, 0.3);
+        transition: all 0.3s ease;
+    }
+    div.stButton > button[kind="primary"]:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 6px 20px rgba(0, 198, 255, 0.5);
+    }
+    /* Harmonisation des métriques */
+    [data-testid="stMetricValue"] {
+        color: #00f2fe;
+    }
+</style>
+""", unsafe_allow_html=True)
+
 # Configuration de l'URL de l'API (locale dans le conteneur)
 API_URL = "http://localhost:8000"
 
@@ -63,22 +88,22 @@ if st.session_state.fake_data is not None:
     fig = go.Figure()
     fig.add_trace(go.Scatter(
         y=st.session_state.fake_data,
-        mode='lines+markers', 
-        name='Signal',
-        line=dict(color='cyan', width=2),
-        marker=dict(size=4, color='yellow')
+        mode='lines', 
+        fill='tozeroy',
+        fillcolor='rgba(0, 242, 254, 0.1)',
+        name='Amplitude du Signal'
     ))
+
     fig.update_layout(
-        title="Signal Sonar - 60 fréquences",
-        xaxis_title="Fréquence",
-        yaxis_title="Amplitude",
-        height=400,
+        height=350,
+        margin=dict(l=0, r=0, t=30, b=0),
         template="plotly_dark",
-        dragmode=False,
-        hovermode='x'
+        xaxis=dict(showgrid=False, title="Index des Capteurs (60)"),
+        yaxis=dict(showgrid=True, gridcolor='rgba(255,255,255,0.1)', title="Amplitude"),
+        hovermode="x unified"
     )
     # Correction width
-    st.plotly_chart(fig, width='stretch')
+    st.plotly_chart(fig, width='stretch',config={'displayModeBar': False})
     
     if st.button("Lancer l'analyse via l'API", type="primary", width='stretch'):
         with st.spinner("Analyse en cours via l'API..."):
@@ -101,28 +126,33 @@ if st.session_state.fake_data is not None:
     if st.session_state.result:
         st.divider()
         res = st.session_state.result
-        col1, col2, col3 = st.columns(3)
-        
-        with col1:
-            icon = "🔴" if res["prediction"] == "M" else "🟢"
-            st.metric(
-                "Prédiction", 
-                f"{icon} {res['prediction']}"
-            )
-        with col2:
-            st.metric("Confiance", f"{res['confidence']*100:.2f}%")
-        with col3:
-            st.metric("Description", res['description'])
-        
-        # Graphique des probabilités
-        fig_proba = go.Figure(go.Bar(
-            x=list(res['probabilities'].keys()),
-            y=list(res['probabilities'].values()),
-            marker_color=['#ff4b4b', '#4caf50']
-        ))
-        fig_proba.update_layout(height=300, template="plotly_dark")
-        st.plotly_chart(fig_proba, width='stretch')
+        color = "#ff4b4b" if res["prediction"] == "M" else "#4caf50"
+        st.markdown(f"""
+            <div style="background-color: {color}22; border: 1px solid {color}; padding: 20px; border-radius: 10px; text-align: center; margin-bottom: 25px;">
+                <h2 style="color: {color}; margin: 0;">Résultat : {res['description']}</h2>
+                <p style="margin: 0; opacity: 0.8;">Indice de confiance : {res['confidence']*100:.2f}%</p>
+            </div>
+        """, unsafe_allow_html=True)
 
+        col1, col2 = st.columns([1, 1])
+
+        with col1:
+            st.subheader("📊 Probabilités")
+            fig_proba = go.Figure(go.Bar(
+                x=list(res['probabilities'].keys()),
+                y=list(res['probabilities'].values()),
+                marker_color=[ '#ff4b4b', '#4caf50'],
+                text=[f"{v*100:.1f}%" for v in res['probabilities'].values()],
+                textposition='auto',
+            ))
+            fig_proba.update_layout(height=300, template="plotly_dark", margin=dict(l=0,r=0,t=0,b=0))
+            st.plotly_chart(fig_proba, width='stretch', config={'displayModeBar': False})
+            
+        with col2:
+            st.subheader("🎯 Indicateurs Clés")
+            st.metric("Confiance", f"{res['confidence']*100:.2f}%", help="Certitude du modèle")
+            st.metric("Type détecté", res['prediction'], delta="Signal Stable")
+        
         st.divider()
         st.subheader("🔍 Analyse de l'Importance des Fréquences")
         st.write("Quelles fréquences sont les plus déterminantes pour le modèle en général ?")
@@ -171,4 +201,4 @@ else:
     st.info("Utilisez la barre latérale pour générer un signal.")
 
 st.divider()
-st.markdown('<div style="text-align: center; color: gray;"><small> Sonar Project AI | Random Forest Classifier</small></div>', unsafe_allow_html=True)
+st.markdown('<div style="text-align: center; color: gray;"><small> Sonar Project AI | Jennifer Marcia </small></div>', unsafe_allow_html=True)
