@@ -26,7 +26,7 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         print(f"Erreur critique au chargement : {e}")
 
-    yield 
+    yield
     ML_MODELS.clear()
 
 # On passe le lifespan à l'application
@@ -77,6 +77,27 @@ def predict(data: SonarInput):
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Erreur interne : {str(e)}")
+
+
+@app.get("/importance", tags=["Analysis"])
+def get_importance():
+    """Renvoie l'importance globale des 60 fréquences du modèle RandomForest"""
+    if "pipeline" not in ML_MODELS:
+        raise HTTPException(status_code=503, detail="Modèle non chargé")
+    
+    try:
+        # Extraire le modèle de la pipeline
+        model = ML_MODELS["pipeline"].named_steps['clf']
+        importances = model.feature_importances_
+        
+        # Préparer les données pour le front-end
+        feature_importance = {
+            f"C{i+1}": float(importances[i]) for i in range(len(importances))
+        }
+        
+        return {"feature_importance": feature_importance}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Erreur calcul importance : {str(e)}")
 
 @app.get("/", tags=["System"])
 def healthcheck():

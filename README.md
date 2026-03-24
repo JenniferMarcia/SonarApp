@@ -7,15 +7,20 @@ sdk: docker
 app_port: 7860
 ---
 
-Sonar-project est unr application d'**Intelligence Artificielle** pour la classification binaire de signaux sonar :
-- **M** : Mine
-- **R** : Roche
+#  Sonar Detector : Classification de Signaux Sous-marins
 
-Application complète avec :
-- **Backend** : FastAPI pour les prédictions ML
-- **Frontend** : Streamlit pour l'interface utilisateur
+**Sonar Detector** est une application web d'intelligence artificielle conçue pour classifier les signaux sonar et différencier les **Roches (R)** des **Mines (M)**. 
 
-**Meilleur modèle** : RandomForest (Pipeline avec StandardScaler) - **F1-score ~83%** (CV 5-fold).
+Ce projet démontre une architecture complète allant de l'entraînement du modèle à son déploiement industriel via une API.
+
+##  Fonctionnalités Clés
+- **Prédiction en Temps Réel** : Interface fluide pour analyser 60 fréquences sonar simultanément.
+- **Architecture Microservices** : Séparation stricte entre le Backend (FastAPI) et le Frontend (Streamlit).
+- **IA Expliquable (XAI)** : Intégration de **SHAP** pour comprendre quelles fréquences influencent la décision du modèle.
+- **Déploiement Continu (CI/CD)** : Workflow GitHub Actions pour un déploiement automatisé sur Hugging Face Spaces.
+
+## Modèle utilisé
+RandomForest (Pipeline avec StandardScaler) avec  **F1-score ~83%** (CV 5-fold).
 
 ##  Structure du projet
 ```

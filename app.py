@@ -14,6 +14,8 @@ if "fake_data" not in st.session_state:
     st.session_state.fake_data = None
 if "result" not in st.session_state:
     st.session_state.result = None
+if "explanation_img" not in st.session_state:
+    st.session_state.explanation_img = None
 
 st.title("⚓ Détection de Mines sous-marines")
 st.markdown("""
@@ -28,11 +30,11 @@ with st.sidebar:
     try:
         response = requests.get(f"{API_URL}/", timeout=3)
         if response.status_code == 200:
-            st.success("API connectée")
+            st.markdown("🟢 **API : Connectée**")
         else:
-            st.error("API non disponible")
+            st.markdown("🟠 **API : Erreur Partielle**")
     except:
-        st.error("API inaccessible")
+        st.markdown("🔴 **API : Hors ligne**")
     
     st.divider()
     
@@ -40,17 +42,18 @@ with st.sidebar:
     if st.button("Générer des données aléatoires", width='stretch'):
         st.session_state.fake_data = np.random.uniform(0, 1, 60).tolist()
         st.session_state.result = None
+        st.session_state.explanation_img = None
         st.success("Données générées !")
     
     # Aperçu des données
     if st.session_state.fake_data is not None:
         st.divider()
-        st.subheader("Aperçu du signal (60 fréquences)")
+        st.subheader(" 📊 Aperçu du signal (60 fréquences)")
         preview_df = pd.DataFrame({
             "Fréquence": range(1, 61),
             "Amplitude": st.session_state.fake_data
         })
-        st.dataframe(preview_df.head(10), use_container_width=True)
+        st.dataframe(preview_df.head(10), width='stretch')
 
 # --- MAIN PAGE ---
 if st.session_state.fake_data is not None:
@@ -60,7 +63,7 @@ if st.session_state.fake_data is not None:
     fig = go.Figure()
     fig.add_trace(go.Scatter(
         y=st.session_state.fake_data,
-        mode='lines+markers',
+        mode='lines+markers', 
         name='Signal',
         line=dict(color='cyan', width=2),
         marker=dict(size=4, color='yellow')
@@ -74,9 +77,9 @@ if st.session_state.fake_data is not None:
         dragmode=False,
         hovermode='x'
     )
-    st.plotly_chart(fig, use_container_width=True)
+    # Correction width
+    st.plotly_chart(fig, width='stretch')
     
-    # Bouton d'analyse
     if st.button("Lancer l'analyse via l'API", type="primary", width='stretch'):
         with st.spinner("Analyse en cours via l'API..."):
             try:
@@ -91,61 +94,81 @@ if st.session_state.fake_data is not None:
                     st.success("Analyse terminée !")
                 else:
                     st.error(f"Erreur API: {response.status_code}")
-                    
-            except requests.exceptions.ConnectionError:
-                st.error("Impossible de contacter l'API. Vérifiez que FastAPI est démarré.")
             except Exception as e:
                 st.error(f"Erreur: {str(e)}")
     
     # Affichage des résultats
     if st.session_state.result:
         st.divider()
-        st.subheader("Résultats de l'analyse")
-        
         res = st.session_state.result
         col1, col2, col3 = st.columns(3)
         
         with col1:
-            prediction_color = "🔴" if res["prediction"] == "M" else "🟢"
+            icon = "🔴" if res["prediction"] == "M" else "🟢"
             st.metric(
-                label="Prédiction", 
-                value=f"{prediction_color} {res['prediction']} - {res['description']}"
+                "Prédiction", 
+                f"{icon} {res['prediction']}"
             )
         with col2:
             st.metric("Confiance", f"{res['confidence']*100:.2f}%")
         with col3:
-            st.metric("Statut", "Analyse terminée")
+            st.metric("Description", res['description'])
         
         # Graphique des probabilités
-        st.subheader("Distribution des probabilités")
-        proba_df = pd.DataFrame({
-            'Classe': list(res['probabilities'].keys()),
-            'Probabilité': list(res['probabilities'].values())
-        })
-        
-        fig_proba = go.Figure()
-        fig_proba.add_trace(go.Bar(
-            x=proba_df['Classe'],
-            y=proba_df['Probabilité'],
-            text=[f"{p:.1%}" for p in proba_df['Probabilité']],
-            textposition='auto',
+        fig_proba = go.Figure(go.Bar(
+            x=list(res['probabilities'].keys()),
+            y=list(res['probabilities'].values()),
             marker_color=['#ff4b4b', '#4caf50']
         ))
-        fig_proba.update_layout(
-            title="Probabilités de classification",
-            yaxis_title="Probabilité",
-            yaxis_range=[0, 1],
-            height=400
-        )
+        fig_proba.update_layout(height=300, template="plotly_dark")
         st.plotly_chart(fig_proba, width='stretch')
-        
-else:
-    st.info("Générez des données dans la barre latérale pour commencer l'analyse")
 
-# Footer
+        st.divider()
+        st.subheader("🔍 Analyse de l'Importance des Fréquences")
+        st.write("Quelles fréquences sont les plus déterminantes pour le modèle en général ?")
+        
+        if st.button("Afficher l'importance des capteurs", width='stretch'):
+            with st.spinner("Récupération des données du modèle..."):
+                try:
+                    import_res = requests.get(f"{API_URL}/importance")
+                    if import_res.status_code == 200:
+                        data_imp = import_res.json()["feature_importance"]
+                        
+                        # Création du DataFrame pour Plotly
+                        df_imp = pd.DataFrame({
+                            'Fréquence': list(data_imp.keys()),
+                            'Importance': list(data_imp.values())
+                        }).sort_values(by='Importance', ascending=False).head(15) # Top 15 pour la clarté
+
+                        # Graphique Plotly Interactif
+                        fig_imp = go.Figure(go.Bar(
+                            x=df_imp['Importance'],
+                            y=df_imp['Fréquence'],
+                            orientation='h',
+                            marker=dict(
+                                color=df_imp['Importance'],
+                                colorscale='Viridis'
+                            )
+                        ))
+                        
+                        fig_imp.update_layout(
+                            title="Top 15 des fréquences les plus discriminantes",
+                            xaxis_title="Score d'importance",
+                            yaxis_title="Capteurs (C1-C60)",
+                            template="plotly_dark",
+                            height=450,
+                            yaxis={'categoryorder':'total ascending'}
+                        )
+                        
+                        st.plotly_chart(fig_imp, width='stretch')
+                        st.info("Ce graphique montre que certaines plages de fréquences impactent plus l'algorithme que d'autres lors de la détection.")
+                    else:
+                        st.error("Erreur lors de la récupération des importances.")
+                except Exception as e:
+                    st.error(f"Erreur de connexion : {e}")
+
+else:
+    st.info("Utilisez la barre latérale pour générer un signal.")
+
 st.divider()
-st.markdown("""
-<div style="text-align: center; color: gray;">
-    <small> Modèle RandomForest entraîné sur dataset sonar | Interface Streamlit + API FastAPI</small>
-</div>
-""", unsafe_allow_html=True)
+st.markdown('<div style="text-align: center; color: gray;"><small> Sonar Project AI | Random Forest Classifier</small></div>', unsafe_allow_html=True)
