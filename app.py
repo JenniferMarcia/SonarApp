@@ -66,7 +66,7 @@ with st.sidebar:
     
     # Vérification de l'API
     try:
-        response = requests.get(f"{API_URL}/", timeout=3)
+        response = requests.get(f"{API_URL}/", timeout=1)
         if response.status_code == 200:
             api_data = response.json()
             st.markdown("🟢 **API : Connectée**")
@@ -106,7 +106,7 @@ with st.sidebar:
     def get_monitoring_report():
         """Récupère le rapport de monitoring avec cache"""
         try:
-            response = requests.get(f"{API_URL}/monitoring", timeout=30)
+            response = requests.get(f"{API_URL}/monitoring", timeout=5)
             if response.status_code == 200:
                 return response.content, True
             else:
@@ -254,7 +254,7 @@ if st.session_state.fake_data is not None:
                 try:
                     resp = requests.post(f"{API_URL}/explain", 
                                         json={"features": st.session_state.fake_data},
-                                        timeout=15)
+                                        timeout=10)
                     
                     if resp.status_code == 200:
                         img = resp.json()["shap_plot"]
