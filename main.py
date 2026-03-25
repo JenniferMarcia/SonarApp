@@ -9,31 +9,45 @@ import shap
 import matplotlib.pyplot as plt
 import io
 import base64
+from fastapi.responses import FileResponse
+import logging
 
+
+from config import (
+    MODEL_PATH,
+    LABEL_ENCODER_PATH,
+    MONITORING_FILE,
+    CLASSES,
+    N_FEATURES,
+    FEATURE_NAMES,
+)
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 # Dictionnaire global pour stocker les modèles ML chargés en mémoire
 ML_MODELS = {}
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    """
+    Gère le cycle de vie de l'application FastAPI.
+    """
     try:
-        base_dir = os.path.dirname(__file__)
-        model_path = os.path.join(base_dir, "models", "best_model_sonar.joblib")
-        le_path = os.path.join(base_dir, "models", "label_encoder_sonar.joblib")
-       
-        if os.path.exists(model_path) and os.path.exists(le_path):
-            ML_MODELS["pipeline"] = joblib.load(model_path)
-            ML_MODELS["label_encoder"] = joblib.load(le_path)
+        if os.path.exists(MODEL_PATH) and os.path.exists(LABEL_ENCODER_PATH):
+            ML_MODELS["pipeline"] = joblib.load(MODEL_PATH)
+            ML_MODELS["label_encoder"] = joblib.load(LABEL_ENCODER_PATH)      
             
             # Initialiser l'explainer SHAP
             model_core = ML_MODELS["pipeline"].named_steps['clf']
             ML_MODELS["explainer"] = shap.TreeExplainer(model_core)
             
-            print("Modèles chargés avec succès.")
+            logger.info("Modèles chargés avec succès.")
         else:
-            print("ERREUR : Fichiers modèles introuvables au chemin spécifié.")
+            logger.error("ERREUR : Fichiers modèles introuvables au chemin spécifié.")
+         
     except Exception as e:
-        print(f"Erreur critique au chargement : {e}")
+        logger.error(f"Erreur critique au chargement : {e}")
 
     yield
     ML_MODELS.clear()
@@ -50,7 +64,7 @@ def predict(data: SonarInput):
     - **R** : Rock (Roche)
     """
     # Vérification de la dimension de l'input (60 colonnes)
-    if len(data.features) != 60:
+    if len(data.features) != N_FEATURES:
         raise HTTPException(
             status_code=400, 
             detail=f"Le modèle attend 60 caractéristiques, reçu: {len(data.features)}"
@@ -58,8 +72,7 @@ def predict(data: SonarInput):
 
     try:
         # Transformation de l'entrée en DataFrame
-        feature_names = [f'C{i}' for i in range(1, 61)]
-        input_df = pd.DataFrame([data.features], columns=feature_names)
+        input_df = pd.DataFrame([data.features], columns=FEATURE_NAMES)
 
         # Prédiction avec la Pipeline (Scaling + Modèle inclus)
         prediction_idx = ML_MODELS["pipeline"].predict(input_df)[0]
@@ -70,13 +83,13 @@ def predict(data: SonarInput):
         
         # 3. Traduction du code numérique en texte
         label = ML_MODELS["label_encoder"].inverse_transform([prediction_idx])[0]
-        full_label = "Mine (Métal)" if label == 'M' else "Roche"
+        full_label = CLASSES[label]
         
         prob_mapping = {
             str(classes[i]): round(float(probabilities[i]), 4) 
             for i in range(len(classes))
         }
-
+        
         return {
             "prediction": label,
             "description": full_label,
@@ -111,16 +124,16 @@ def get_importance():
 
 @app.post("/explain", tags=["Analysis"])
 def explain_prediction(data: SonarInput):
-
+    """Génère une explication SHAP (SHapley Additive exPlanations) pour une prédiction.
+    """
     if "pipeline" not in ML_MODELS or "explainer" not in ML_MODELS:
         raise HTTPException(status_code=503, detail="Modèle ou explainer non chargé")
     
-    if len(data.features) != 60:
-        raise HTTPException(status_code=400, detail=f"Attendu 60 features")
+    if len(data.features) != N_FEATURES:
+        raise HTTPException(status_code=400, detail=f"Attendu {N_FEATURES} features")
     
     try:
-        feature_names = [f'C{i}' for i in range(1, 61)]
-        input_df = pd.DataFrame([data.features], columns=feature_names)
+        input_df = pd.DataFrame([data.features], columns=FEATURE_NAMES)
         
         # Scaler
         scaler = ML_MODELS["pipeline"].named_steps['scaler']
@@ -150,7 +163,7 @@ def explain_prediction(data: SonarInput):
             base_value, 
             shap_vals_1d, 
             X_scaled_1d,
-            feature_names=feature_names, 
+            feature_names=FEATURE_NAMES, 
             matplotlib=True, 
             show=False
             )
@@ -164,12 +177,46 @@ def explain_prediction(data: SonarInput):
         return {"shap_plot": img_str}
     
     except Exception as e:
-        print(f"[EXPLAIN ERROR] {str(e)}")
+        logger.info(f"[EXPLAIN ERROR] {str(e)}")
         import traceback
-        print(traceback.format_exc())
+        logger.info(traceback.format_exc())
         raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.get("/", tags=["System"])
 def healthcheck():
-    return {"status": "online", "model_loaded": "pipeline" in ML_MODELS}
+    """
+    Vérifie l'état de santé de l'API et des composants associés.
+    """
+    return {
+        "status": "online", 
+        "model_loaded": "pipeline" in ML_MODELS,
+        "monitoring_exists": os.path.exists(MONITORING_FILE)}
+
+    
+@app.get("/monitoring", tags=["Monitoring"])
+def get_monitoring():
+    """
+    Télécharge le rapport de monitoring pré-généré
+    Le fichier se trouve dans monitoring/monitoring_train_test.html
+    """
+    try:
+        # Vérifier si le fichier existe
+        if not os.path.exists(MONITORING_FILE):
+            logger.warning(f"Fichier monitoring non trouvé : {MONITORING_FILE}")
+            raise HTTPException(
+                status_code=404, 
+                detail="Rapport de monitoring non trouvé. Veuillez d'abord générer le rapport."
+            )  
+        # Retourner le fichier
+        return FileResponse(
+            path=MONITORING_FILE,
+            filename="monitoring_sonar.html",
+            media_type='text/html'
+        )
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Erreur téléchargement monitoring : {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Erreur : {str(e)}")

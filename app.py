@@ -1,3 +1,4 @@
+import os
 import streamlit as st
 import requests
 import numpy as np
@@ -9,7 +10,6 @@ st.set_page_config(page_title="Sonar Detector", page_icon="⚓", layout="wide")
 
 st.markdown("""
 <style>
-    /* Bouton principal personnalisé */
     div.stButton > button[kind="primary"] {
         background: linear-gradient(45deg, #00c6ff, #0072ff);
         color: white;
@@ -44,7 +44,20 @@ if "explanation_img" not in st.session_state:
 
 st.title("⚓ Détection de Mines sous-marines")
 st.markdown("""
-Analyse des signaux sonar pour différencier les **Roches** des **Mines**.
+### 🎯 Objectif
+Analyse des signaux sonar pour différencier les **Roches** des **Mines** sous-marines.
+
+### 🤖 Comment ça fonctionne ?
+- **60 fréquences** analysées par signal sonar
+- **Modèle Random Forest** entraîné sur des données réelles
+- **Explications SHAP** pour comprendre chaque prédiction
+- **Rapport de monitoring** pour suivre la performance du modèle
+
+### 📊 Utilisation
+1. Générez un signal aléatoire
+2. Lancez l'analyse pour obtenir la classification
+3. Visualisez l'importance des fréquences et les explications SHAP
+4. Téléchargez le rapport de monitoring pour suivre les performances du modèle au fil du temps
 """)
 
 # --- SIDEBAR ---
@@ -55,12 +68,17 @@ with st.sidebar:
     try:
         response = requests.get(f"{API_URL}/", timeout=3)
         if response.status_code == 200:
+            api_data = response.json()
             st.markdown("🟢 **API : Connectée**")
+            if api_data.get("monitoring_exists"):
+                st.markdown("📄 **Rapport : Disponible**")
+            else:
+                st.warning("⚠️ **Rapport : Non disponible**")
         else:
             st.markdown("🟠 **API : Erreur Partielle**")
     except:
         st.markdown("🔴 **API : Hors ligne**")
-    
+        
     st.divider()
     
     # Génération des données
@@ -79,7 +97,37 @@ with st.sidebar:
             "Amplitude": st.session_state.fake_data
         })
         st.dataframe(preview_df.head(10), width='stretch')
-
+    
+    # Section Monitoring
+    st.divider()
+    st.subheader("📊 Rapport de Monitoring")
+    
+    @st.cache_data(ttl=60)  # Cache pendant 60 secondes
+    def get_monitoring_report():
+        """Récupère le rapport de monitoring avec cache"""
+        try:
+            response = requests.get(f"{API_URL}/monitoring", timeout=30)
+            if response.status_code == 200:
+                return response.content, True
+            else:
+                return None, False
+        except:
+            return None, None
+    report_content, report_available = get_monitoring_report()
+    
+    if report_available:
+        st.download_button(
+            label="📥 Télécharger le rapport",
+            data=report_content,
+            file_name="monitoring_sonar.html",
+            mime="text/html",
+            use_container_width=True
+        )
+    elif response.status_code == 404:
+        st.warning("Rapport non trouvé. Vérifiez que le fichier monitoring/monitoring_train_test.html existe.")
+    else:
+        st.error(f"Erreur API : {response.status_code}")
+        
 # --- MAIN PAGE ---
 if st.session_state.fake_data is not None:
     # Visualisation du signal
@@ -103,7 +151,7 @@ if st.session_state.fake_data is not None:
         hovermode="x unified"
     )
     # Correction width
-    st.plotly_chart(fig, width='stretch',config={'displayModeBar': False})
+    st.plotly_chart(fig, width="stretch", config={'displayModeBar': False})
     
     if st.button("Lancer l'analyse via l'API", type="primary", width='stretch'):
         with st.spinner("Analyse en cours via l'API..."):
@@ -154,7 +202,7 @@ if st.session_state.fake_data is not None:
             st.metric("Type détecté", res['prediction'], delta="Signal Stable")
         
         st.divider()
-        st.subheader("🔍 Analyse de l'Importance des Fréquences")
+        st.subheader("🔍 Analyse de l'Importance des Fréquences avec Scikit-learn feature importance")
         st.write("Quelles fréquences sont les plus déterminantes pour le modèle en général ?")
         
         if st.button("Afficher l'importance des capteurs", width='stretch'):
@@ -221,12 +269,12 @@ if st.session_state.fake_data is not None:
                             """)
                     else:
                         st.error(f"Erreur API: {resp.status_code}")
-                except Exception as e:
-                    st.error(f"Erreur: {str(e)}")
                 except requests.exceptions.Timeout:
                     st.error("Timeout lors du calcul SHAP (opération intensive)")
+                except requests.exceptions.RequestException as e:
+                    st.error(f"Erreur de communication avec l'API : {e}")
                 except Exception as e:
-                    st.error(f"Erreur SHAP : {e}")
+                    st.error(f"Erreur inattendue : {e}")
 
 else:
     st.info("Utilisez la barre latérale pour générer un signal.")

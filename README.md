@@ -35,6 +35,8 @@ Sonar/
 ├── models/
 │   ├── best_model_sonar.joblib
 │   ├── label_encoder_sonar.joblib
+├── monitoring/
+│   └── monitoring_train_test.html # Rapport avec EvidentlyAI
 └── README.md
 ```
 
